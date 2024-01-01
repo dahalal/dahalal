@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const db = require('./db');
+const db = require('./src/db');
+const sendProductFeedback = require('./src/send-product-feedback');
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -66,6 +67,42 @@ app.post('/products/:id', (req, res) => {
     res.status(201).json({ id });
   }
 });
+
+// Endpoint to create a new product
+app.post('/products/:id/feedback', (req, res) => {
+  // Check for the API secret header
+  if (!isValidApiSecret(req)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const id = req.params.id;
+  const { message } = req.body;
+
+  if (!id || !message) {
+    return res.status(400).json({ error: 'Product id and message are required' });
+  }
+
+  const existingProduct = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+
+  if (existingProduct) {
+    sendProductFeedback(existingProduct, message).then(({ data, error }) => {
+      if (error) {
+        console.error("Error received when trying to send product feedback", error);
+        res.status(400).json({ error: error });
+        return;
+      }
+
+      console.log("product feedback successfully sent", JSON.stringify(data));
+      res.json({ ok: true });
+    }).catch(err => {
+      console.error("Error thrown when trying to send product feedback", err);
+      res.status(500).json({ error: "unknown error received" });
+    })
+  } else {
+    console.log("no product found. won't send feedback");
+    res.json({ ok: true });
+  }
+})
 
 // Start the server
 app.listen(port, () => {
